@@ -17,7 +17,7 @@ float cap_servo(float a) // a must be between 0 and 1
     return a * (MAX_SERVO - MIN_SERVO) + MIN_SERVO;
 }
 
-int main(int argc, char* argv[])
+void knob_mode()
 {
     // get main i2c bus object
     I2C_BUS i2c_bus = I2C_BUS(0);
@@ -50,5 +50,70 @@ int main(int argc, char* argv[])
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+}
 
+void square()
+{
+    // get main i2c bus object
+    I2C_BUS i2c_bus = I2C_BUS(0);
+    PCA9685 pwm = PCA9685(&i2c_bus, 0x40);
+
+    pwm.turn_off();
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    pwm.set_PWM_freq(50);
+    pwm.wake_up();
+
+    pwm.set_PWM(15, 0, 331);
+    while (true)
+    {
+        for (__u16 a0 = 393; a0 >= 329; a0--)
+        {
+            pwm.set_PWM(14, 0, a0);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
+        for (__u16 a1 = 338; a1 <= 350; a1++)
+        {
+            pwm.set_PWM(15, 0, a1);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
+        for (__u16 a0 = 329; a0 <= 393; a0++)
+        {
+            pwm.set_PWM(14, 0, a0);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
+        for (__u16 a1 = 350; a1 >= 338; a1--)
+        {
+            pwm.set_PWM(15, 0, a1);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
+}
+
+void point_to_coordinates(__u16 a0, __u16 a1)
+{
+    I2C_BUS i2c_bus = I2C_BUS(0);
+    PCA9685 pwm = PCA9685(&i2c_bus, 0x40);
+
+    pwm.set_PWM_freq(50);
+    pwm.wake_up();
+
+    pwm.set_PWM(14, 0, a0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    pwm.set_PWM(15, 0, a1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+}
+
+int main(int argc, char* argv[])
+{
+    if (argc != 3)
+    {
+        std::cerr << "Usage: " << argv[0] << " <integer1> <integer2>" << std::endl;
+        square();
+    }
+
+    point_to_coordinates(std::stoi(argv[1]), std::stoi(argv[2]));
+    
 }
