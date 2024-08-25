@@ -177,6 +177,14 @@ void test_cv2_laser_detector()
     using namespace cv;
     using namespace std;
 
+    I2C_BUS i2c_bus = I2C_BUS(0);
+    PCA9685 pwm = PCA9685(&i2c_bus, 0x40);
+
+    pwm.set_PWM_freq(50);
+    pwm.wake_up();
+
+    
+
     VideoCapture cap(0); // Open webcam device 0
 
     if (!cap.isOpened()) {
@@ -202,9 +210,10 @@ void test_cv2_laser_detector()
     Mat frame, hsv, gray, mask;
     vector<vector<Point>> contours;
 
-    float largestContourArea, contourArea;
-    int largestContourIndex;
-    vector<Point> largestContour;
+    float min_distance, distance, ctrl_x = 370, ctrl_y = 340;
+    Point last_laser_position = Point(0,0), laser_position, target_position = Point(0,0);
+    Point likeliest_laser_position = last_laser_position;
+    //vector<Point> largestContour;
 
     Rect rect;
     vector<Rect> targets;
@@ -227,41 +236,45 @@ void test_cv2_laser_detector()
         findContours(mask, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
         target_cascade.detectMultiScale(gray, targets, 1.1, 10, CASCADE_SCALE_IMAGE | CASCADE_FIND_BIGGEST_OBJECT);
 
-        // Find the contour with the largest area
-        largestContourIndex = -1;
-        largestContourArea = 0;
-        for (size_t i = 0; i < contours.size(); i++)
+        // find likeliest contour to be the laser
+        min_distance = 1.0f / 0.0f;;
+        for (const auto& contour : contours)
         {
-            contourArea = cv::contourArea(contours[i]);
-            if (contourArea > largestContourArea)
+            rect = boundingRect(contour);
+            laser_position = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
+            distance = norm(laser_position - last_laser_position);
+            if (distance < min_distance)
             {
-                largestContourIndex = i;
-                largestContourArea = contourArea;
+                min_distance = distance;
+                likeliest_laser_position = laser_position;
             }
         }
 
         // Draw a circle around the largest contour, if it exists
-        if (largestContourIndex != -1)
-        {
-            largestContour = contours[largestContourIndex];
-            rect = boundingRect(largestContour);
-            circle(frame, Point(rect.x + rect.width / 2, rect.y + rect.height / 2), 5, Scalar(0, 255, 0), 2);
-        }
+        circle(frame, likeliest_laser_position, 5, Scalar(0, 255, 0), 2);
 
         // Draw circles around detected hands and their centers
-        for (size_t i = 0; i < targets.size(); i++)
+        if (targets.size() > 0)
         {
             //Rect hand = hands[i];
             //Point center(hand.x + hand.width / 2, hand.y + hand.height / 2);
             //circle(frame, center, 5, Scalar(0, 255, 0), 2);
-            rectangle(frame, targets[i], Scalar(0, 0, 255), 2);
+            rectangle(frame, targets[0], Scalar(0, 0, 255), 2);
+            target_position = Point(targets[0].x + targets[0].width / 2, targets[0].y + targets[0].height / 2);
+        }
+
+        if (contours.size() > 0 && targets.size() > 0)
+        {
+            ctrl_x -= (target_position.x - likeliest_laser_position.x) * 0.01;
+            ctrl_y -= (target_position.y - likeliest_laser_position.y) * 0.01;
         }
 
         imshow("Frame", frame);
 
+        pwm.set_PWM(14, 0, ctrl_x);
         contours.clear();
-        largestContour.clear();
         targets.clear();
+        pwm.set_PWM(15, 0, ctrl_y);
 
         if (waitKey(1) == 27)
             break;
