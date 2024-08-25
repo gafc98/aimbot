@@ -126,10 +126,14 @@ int test_cv22() {
 
     // Create a cascade classifier for hand detection
     CascadeClassifier hand_cascade;
-    if (!hand_cascade.load("haarcascade_hand.xml")) {
+    if (!hand_cascade.load("haarcascades/haarcascade_catfrontalface.xml")) {
         cerr << "Error loading hand cascade" << endl;
         return -1;
     }
+
+    // Create a window with a specific size
+    namedWindow("Frame", WINDOW_NORMAL);
+    resizeWindow("Frame", 640, 360); // Adjust the width and height as needed
 
     while (true) {
         Mat frame;
@@ -168,7 +172,7 @@ int test_cv22() {
     return 0;
 }
 
-void test_cv2()
+void test_cv2_laser_detector()
 {
     using namespace cv;
     using namespace std;
