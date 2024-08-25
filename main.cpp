@@ -184,58 +184,87 @@ void test_cv2_laser_detector()
         return;
     }
 
+    // Create a cascade classifier for target detection
+    CascadeClassifier target_cascade;
+    if (!target_cascade.load("haarcascades/haarcascade_catfrontalface.xml")) {
+        cerr << "Error loading hand cascade" << endl;
+        return;
+    }
+
     // Create a window with a specific size
     namedWindow("Frame", WINDOW_NORMAL);
     resizeWindow("Frame", 640, 360); // Adjust the width and height as needed
 
-    while (true) {
-        Mat frame;
+    // Define ranges for red color in HSV
+    Scalar lower_red(150, 100, 100);
+    Scalar upper_red(180, 255, 255);
+
+    Mat frame, hsv, gray, mask;
+    vector<vector<Point>> contours;
+
+    float largestContourArea, contourArea;
+    int largestContourIndex;
+    vector<Point> largestContour;
+
+    Rect rect;
+    vector<Rect> targets;
+
+    while (true)
+    {
         cap >> frame;
 
-        if (frame.empty()) {
+        if (frame.empty())
             break;
-        }
 
         // Convert to HSV color space
-        Mat hsv;
         cvtColor(frame, hsv, COLOR_BGR2HSV);
-
-        // Define ranges for red color in HSV
-        Scalar lower_red(150, 100, 100);
-        Scalar upper_red(180, 255, 255);
+        cvtColor(frame, gray, COLOR_BGR2GRAY);
 
         // Threshold the HSV image to get only red colors
-        Mat mask;
         inRange(hsv, lower_red, upper_red, mask);
 
-        // Find contours in the mask
-        vector<vector<Point>> contours;
+        // Find lasers and targets in the image
         findContours(mask, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+        target_cascade.detectMultiScale(gray, targets, 1.1, 10, CASCADE_SCALE_IMAGE | CASCADE_FIND_BIGGEST_OBJECT);
 
         // Find the contour with the largest area
-        int largestContourIndex = -1;
-        float largestContourArea = 0;
-        for (size_t i = 0; i < contours.size(); i++) {
-            float contourArea = cv::contourArea(contours[i]);
-            if (contourArea > largestContourArea) {
+        largestContourIndex = -1;
+        largestContourArea = 0;
+        for (size_t i = 0; i < contours.size(); i++)
+        {
+            contourArea = cv::contourArea(contours[i]);
+            if (contourArea > largestContourArea)
+            {
                 largestContourIndex = i;
                 largestContourArea = contourArea;
             }
         }
 
         // Draw a circle around the largest contour, if it exists
-        if (largestContourIndex != -1) {
-            vector<Point> largestContour = contours[largestContourIndex];
-            Rect rect = boundingRect(largestContour);
-            Point center(rect.x + rect.width / 2, rect.y + rect.height / 2);
-            circle(frame, center, 5, Scalar(0, 255, 0), 2);
+        if (largestContourIndex != -1)
+        {
+            largestContour = contours[largestContourIndex];
+            rect = boundingRect(largestContour);
+            circle(frame, Point(rect.x + rect.width / 2, rect.y + rect.height / 2), 5, Scalar(0, 255, 0), 2);
+        }
+
+        // Draw circles around detected hands and their centers
+        for (size_t i = 0; i < targets.size(); i++)
+        {
+            //Rect hand = hands[i];
+            //Point center(hand.x + hand.width / 2, hand.y + hand.height / 2);
+            //circle(frame, center, 5, Scalar(0, 255, 0), 2);
+            rectangle(frame, targets[i], Scalar(0, 0, 255), 2);
         }
 
         imshow("Frame", frame);
 
-        if (waitKey(1) == 27) {
+        contours.clear();
+        largestContour.clear();
+        targets.clear();
+
+        if (waitKey(1) == 27)
             break;
-        }
     }
 
     cap.release();
@@ -244,7 +273,7 @@ void test_cv2_laser_detector()
 
 int main(int argc, char* argv[])
 {
-    test_cv22();
+    test_cv2_laser_detector();
 
     if (argc != 3)
     {
