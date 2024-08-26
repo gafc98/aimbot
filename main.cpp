@@ -218,6 +218,9 @@ void test_cv2_laser_detector()
     Rect rect;
     vector<Rect> targets;
 
+    pwm.set_PWM(14, 0, ctrl_x);
+    pwm.set_PWM(15, 0, ctrl_y);
+
     while (true)
     {
         cap >> frame;
@@ -267,14 +270,133 @@ void test_cv2_laser_detector()
         {
             ctrl_x -= (target_position.x - likeliest_laser_position.x) * 0.01;
             ctrl_y -= (target_position.y - likeliest_laser_position.y) * 0.01;
+            pwm.set_PWM(14, 0, ctrl_x);
+            pwm.set_PWM(15, 0, ctrl_y);
         }
+        
 
         imshow("Frame", frame);
-
-        pwm.set_PWM(14, 0, ctrl_x);
         contours.clear();
         targets.clear();
-        pwm.set_PWM(15, 0, ctrl_y);
+        
+
+        if (waitKey(1) == 27)
+            break;
+    }
+
+    cap.release();
+    destroyAllWindows();
+}
+
+void test_cv2_laser_detector_green_target()
+{
+    using namespace cv;
+    using namespace std;
+
+    I2C_BUS i2c_bus = I2C_BUS(0);
+    PCA9685 pwm = PCA9685(&i2c_bus, 0x40);
+
+    pwm.set_PWM_freq(50);
+    pwm.wake_up();
+
+    VideoCapture cap(0); // Open webcam device 0
+
+    if (!cap.isOpened()) {
+        std::cerr << "Error opening video capture" << std::endl;
+        return;
+    }
+
+    // Create a window with a specific size
+    namedWindow("Frame", WINDOW_NORMAL);
+    resizeWindow("Frame", 640, 360); // Adjust the width and height as needed
+
+    // Define ranges for red and green color in HSV
+    Scalar lower_red(150, 100, 100);
+    Scalar upper_red(180, 255, 255);
+
+    Scalar lower_green(40, 40, 40);
+    Scalar upper_green(70, 100, 100);
+
+    Mat frame, hsv, mask;
+    vector<vector<Point>> red_contours, green_contours;
+
+    float min_distance, distance, ctrl_x = 370, ctrl_y = 340;
+
+    Point last_laser_position = Point(0,0), laser_position;
+    Point likeliest_laser_position = last_laser_position;
+    
+    Point last_target_position = Point(0,0), target_position = Point(0,0);
+    Point likeliest_target_position = last_target_position;
+
+    Rect rect;
+
+    pwm.set_PWM(14, 0, ctrl_x);
+    pwm.set_PWM(15, 0, ctrl_y);
+
+    while (true)
+    {
+        cap >> frame;
+
+        if (frame.empty())
+            break;
+
+        // Convert to HSV color space
+        cvtColor(frame, hsv, COLOR_BGR2HSV);
+
+        // Threshold the HSV image to get laser and target contours
+        inRange(hsv, lower_red, upper_red, mask);
+        findContours(mask, red_contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+        inRange(hsv, lower_green, upper_green, mask);
+        findContours(mask, green_contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+        // find likeliest contour to be the laser
+        min_distance = 1.0f / 0.0f;;
+        for (const auto& contour : red_contours)
+        {
+            rect = boundingRect(contour);
+            laser_position = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
+            distance = norm(laser_position - last_laser_position);
+            if (distance < min_distance)
+            {
+                min_distance = distance;
+                likeliest_laser_position = laser_position;
+            }
+        }
+
+        // find likeliest contour to be the target
+        min_distance = 1.0f / 0.0f;;
+        for (const auto& contour : green_contours)
+        {
+            rect = boundingRect(contour);
+            target_position = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
+            distance = norm(target_position - last_target_position);
+            if (distance < min_distance)
+            {
+                min_distance = distance;
+                likeliest_target_position = target_position;
+            }
+        }
+
+        // Draw a circle around the largest contour, if it exists
+        circle(frame, likeliest_laser_position, 5, Scalar(0, 255, 0), 2);
+        circle(frame, likeliest_target_position, 5, Scalar(0, 0, 255), 2);
+
+        cout << "laser: " << likeliest_laser_position.x << " " << likeliest_laser_position.y
+            << "  target: " << likeliest_target_position.x << " " << likeliest_target_position.y << endl;
+
+        if (red_contours.size() > 0 && green_contours.size() > 0)
+        {
+            ctrl_x -= (likeliest_target_position.x - likeliest_laser_position.x) * 0.01;
+            ctrl_y -= (likeliest_target_position.y - likeliest_laser_position.y) * 0.01;
+            pwm.set_PWM(14, 0, ctrl_x);
+            pwm.set_PWM(15, 0, ctrl_y);
+        }
+        
+
+        imshow("Frame", frame);
+        red_contours.clear();
+        green_contours.clear();
+        
 
         if (waitKey(1) == 27)
             break;
@@ -286,14 +408,16 @@ void test_cv2_laser_detector()
 
 int main(int argc, char* argv[])
 {
-    test_cv2_laser_detector();
+    
 
-    if (argc != 3)
+    if (argc == 3)
     {
         std::cerr << "Usage: " << argv[0] << " <integer1> <integer2>" << std::endl;
         square();
     }
 
+    test_cv2_laser_detector_green_target();
+    test_cv2_laser_detector();
     
     point_to_coordinates(std::stoi(argv[1]), std::stoi(argv[2]));
     
